@@ -41,3 +41,10 @@ requests>=2.31.0
 httpx>=0.26.0
 python-dotenv>=1.0.0
 tqdm>=4.66.0
+
+# ── Deep Learning — Segmentation ──────────────────────────────────────────
+torch>=2.0.0
+torchvision>=0.15.0
+monai>=1.3.0
+einops>=0.7.0        # required by SwinUNETR
+opencv-python==4.9.0.80

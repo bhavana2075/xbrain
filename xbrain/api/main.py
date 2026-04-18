@@ -236,8 +236,8 @@ async def analyze(
     2. Grad-CAM explainability
     3. SwinUNETR tumor segmentation
     4. Tumor area statistics
-    5. Knowledge-based clinical report
-    6. RAG-enhanced LLM report
+    5. Knowledge-based clinical report (translated to selected language)
+    6. RAG-enhanced LLM report (in selected language)
     """
     if "classifier" not in MODELS:
         raise HTTPException(status_code=503, detail="Classifier model not loaded.")
@@ -278,16 +278,17 @@ async def analyze(
     # 4. Tumor stats
     tumor_stats = compute_tumor_stats(mask)
 
-    # 5. Clinical report
+    # 5. Clinical report — now translated to selected language
     report = generate_clinical_report(
         class_name=clf_result["class_name"],
         confidence=clf_result["confidence"],
         probabilities=clf_result["probabilities"],
         tumor_area_pct=tumor_stats["tumor_area_pct"],
         has_mask=tumor_stats["has_mask"],
+        language=language,
     )
 
-    # 6. RAG report
+    # 6. RAG report — already supports language
     rag_result = generate_rag_report(
         class_name=clf_result["class_name"],
         confidence=clf_result["confidence"],
@@ -303,11 +304,11 @@ async def analyze(
     # Encode images
     img_224 = cv2.resize(img_rgb, (224, 224))
     images = {
-        "original": ndarray_to_base64(img_224),
+        "original":        ndarray_to_base64(img_224),
         "gradcam_heatmap": ndarray_to_base64(heatmap_rgb),
         "gradcam_overlay": ndarray_to_base64(gradcam_overlay),
-        "seg_mask": mask_to_base64(mask),
-        "seg_overlay": ndarray_to_base64(seg_overlay),
+        "seg_mask":        mask_to_base64(mask),
+        "seg_overlay":     ndarray_to_base64(seg_overlay),
     }
 
     return AnalysisResponse(
