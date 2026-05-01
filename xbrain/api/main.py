@@ -59,32 +59,43 @@ SEG_WEIGHTS = ROOT / os.getenv(
 )
 FAISS_INDEX_PATH = ROOT / os.getenv("FAISS_INDEX_PATH", "checkpoints/faiss_index.index")
 
+# Set LOAD_MODELS_ON_STARTUP=false to skip model loading at startup (lazy load instead)
+LOAD_MODELS_ON_STARTUP = os.getenv("LOAD_MODELS_ON_STARTUP", "true").lower() == "true"
+
 # ── Global model holders ──────────────────────────────────────────────────────
 MODELS = {}
 
 
+def _load_models():
+    """Load classifier and segmentor into MODELS dict."""
+    if "classifier" not in MODELS:
+        if not CLF_WEIGHTS.exists():
+            log.error(f"Classification weights not found: {CLF_WEIGHTS}")
+        else:
+            MODELS["classifier"] = build_classifier(str(CLF_WEIGHTS))
+            log.info("✅ Classifier loaded")
+
+    if "segmentor" not in MODELS:
+        if not SEG_WEIGHTS.exists():
+            log.error(f"Segmentation weights not found: {SEG_WEIGHTS}")
+        else:
+            model_seg, device = build_segmentor(str(SEG_WEIGHTS))
+            MODELS["segmentor"] = model_seg
+            MODELS["device"] = device
+            log.info("✅ SwinUNETR Segmentor loaded")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    log.info("Loading models…")
-
-    if not CLF_WEIGHTS.exists():
-        log.error(f"Classification weights not found: {CLF_WEIGHTS}")
+    if LOAD_MODELS_ON_STARTUP:
+        log.info("Loading models at startup…")
+        _load_models()
+        try:
+            build_index(force=False)
+        except Exception as e:
+            log.warning(f"Index build skipped: {e}")
     else:
-        MODELS["classifier"] = build_classifier(str(CLF_WEIGHTS))
-        log.info("✅ Classifier loaded")
-
-    if not SEG_WEIGHTS.exists():
-        log.error(f"Segmentation weights not found: {SEG_WEIGHTS}")
-    else:
-        model_seg, device = build_segmentor(str(SEG_WEIGHTS))
-        MODELS["segmentor"] = model_seg
-        MODELS["device"] = device
-        log.info("✅ SwinUNETR Segmentor loaded")
-
-    try:
-        build_index(force=False)
-    except Exception as e:
-        log.warning(f"Index build skipped: {e}")
+        log.info("⚡ Lazy mode: models will load on first /analyze request")
 
     log.info("🚀 X-Brain API ready")
     yield
@@ -239,6 +250,11 @@ async def analyze(
     5. Knowledge-based clinical report (translated to selected language)
     6. RAG-enhanced LLM report (in selected language)
     """
+    # ── Lazy load models on first request ────────────────────────────────────
+    if "classifier" not in MODELS or "segmentor" not in MODELS:
+        log.info("Lazy loading models on first request…")
+        _load_models()
+
     if "classifier" not in MODELS:
         raise HTTPException(status_code=503, detail="Classifier model not loaded.")
     if "segmentor" not in MODELS:
